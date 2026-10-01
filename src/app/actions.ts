@@ -3,19 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { classifyUrl, cookieArgs, ytDlpJson } from "@/lib/youtube";
-import { NEEDS_CAPTIONS, cleanTranscript, fetchCaptions, pollWhisper, queueWhisper, segmentsToEvents, sponsorSegments } from "@/lib/captions";
-import { embedVideo, toBytes } from "@/lib/embed";
+import { classifyUrl, ytDlpJson } from "@/lib/youtube";
+import { errLine, log } from "@/lib/worker";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
-
-// yt-dlp errors are a wall of stdout; the ERROR line is the useful bit
-const errLine = (e: unknown) => e instanceof Error ? e.message.split("\n").find((l) => l.includes("ERROR")) ?? e.message : String(e);
-
-async function log(level: "INFO" | "WARN" | "ERROR", message: string, youtubeId?: string) {
-	console.log(`[${level}]${youtubeId ? ` ${youtubeId}` : ""} ${message}`);
-	await prisma.log.create({ data: { level, message, youtubeId } });
-}
 
 async function ingestOne(raw: string) {
 	const t = classifyUrl(raw);
@@ -77,95 +68,4 @@ export async function approveChannel(channelId: string, ids: string[]) {
 	await prisma.video.updateMany({ where: { channelId, id: { notIn: ids }, approval: "APPROVED" }, data: { approval: "UNRATED" } });
 	revalidatePath("/");
 	redirect("/");
-}
-
-const BATCH = 20;
-
-// ponytail: sequential, BATCH per click to stay clear of YouTube's 429s and request timeouts; background job if clicking gets old
-export async function fetchTranscripts(_prev: { msg: string }, _form: FormData) {
-	const todo = await prisma.video.findMany({ where: { transcriptSource: null, ...NEEDS_CAPTIONS }, orderBy: { approval: "asc" }, take: BATCH }); // "APPROVED" < "UNRATED"
-	let got = 0, none = 0, failed = 0;
-	await log("INFO", `transcript batch: ${todo.length} videos${cookieArgs().length ? " (with cookies)" : ""}`);
-	for (const v of todo) {
-		const t0 = Date.now();
-		try {
-			const events = await fetchCaptions(v.youtubeId);
-			if (!events) {
-				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "NONE" } });
-				await log("WARN", "no English captions", v.youtubeId);
-				none++;
-				continue;
-			}
-			const skip = await sponsorSegments(v.youtubeId);
-			const transcript = cleanTranscript(events, skip);
-			await prisma.video.update({ where: { id: v.id }, data: { transcript, transcriptSource: "CAPTIONS" } });
-			await log("INFO", `captioned: ${transcript.length} chars, ${skip.length} sponsor segments cut, ${Date.now() - t0}ms`, v.youtubeId);
-			got++;
-		} catch (e) {
-			await log("ERROR", errLine(e), v.youtubeId);
-			failed++; // left null, retried next click
-			if (String(e).includes("429")) break; // rate-limited: more requests only extend the block
-		}
-		await new Promise((r) => setTimeout(r, 4000)); // ponytail: fixed pacing; tune if 429s persist
-	}
-	const w = await whisperStep();
-	const em = await embedStep();
-	revalidatePath("/");
-	const limited = failed && got + none + failed < todo.length;
-	return { msg: `${got} captioned, ${none} without captions${failed ? `, ${failed} failed (will retry)` : ""}${limited ? " — YouTube rate-limited, try again in a few minutes" : ""}${w}${em}` };
-}
-
-// NONE → queued in paudio (WHISPER_PENDING) → polled each click until WHISPER, or FAILED if paudio errors
-async function whisperStep() {
-	const todo = await prisma.video.findMany({ where: { approval: "APPROVED", transcriptSource: { in: ["NONE", "WHISPER_PENDING"] } } });
-	if (!todo.length) return "";
-	let queued = 0, done = 0, waiting = 0;
-	try {
-		for (const v of todo) {
-			if (v.transcriptSource === "NONE") {
-				await queueWhisper(v.youtubeId);
-				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "WHISPER_PENDING" } });
-				await log("INFO", "queued for Whisper in paudio", v.youtubeId);
-				queued++;
-				continue;
-			}
-			const r = await pollWhisper(v.youtubeId);
-			if (r.status === "TRANSCRIBED") {
-				const skip = await sponsorSegments(v.youtubeId);
-				const transcript = cleanTranscript(segmentsToEvents(r.segments ?? []), skip);
-				await prisma.video.update({ where: { id: v.id }, data: { transcript, transcriptSource: "WHISPER" } });
-				await log("INFO", `whispered: ${transcript.length} chars, ${skip.length} sponsor segments cut`, v.youtubeId);
-				done++;
-			} else if (r.status === "UNKNOWN") {
-				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "NONE" } }); // paudio lost it; requeue next click
-				await log("WARN", "paudio has no record, will requeue", v.youtubeId);
-			} else if (r.status === "ERROR") {
-				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "FAILED" } });
-				await log("ERROR", `Whisper failed in paudio: ${r.error ?? "unknown error"}`, v.youtubeId);
-			} else waiting++;
-		}
-	} catch (e) {
-		await log("WARN", `paudio unreachable: ${errLine(e)}`);
-		return " — paudio unreachable, Whisper skipped";
-	}
-	return `; Whisper: ${queued} queued, ${done} done, ${waiting} in progress`;
-}
-
-// Every transcribed video without a vector; local GPU, so no batching or pacing needed
-async function embedStep() {
-	const todo = await prisma.video.findMany({ where: { transcript: { not: null }, embedding: null }, select: { id: true, youtubeId: true, title: true, transcript: true } });
-	if (!todo.length) return "";
-	let done = 0;
-	try {
-		for (const v of todo) {
-			const t0 = Date.now();
-			await prisma.video.update({ where: { id: v.id }, data: { embedding: toBytes(await embedVideo(v.title, v.transcript!)) } });
-			await log("INFO", `embedded in ${Date.now() - t0}ms`, v.youtubeId);
-			done++;
-		}
-	} catch (e) {
-		await log("WARN", `LM Studio unavailable: ${errLine(e)}`);
-		return `; embedded ${done}, LM Studio unavailable for the rest`;
-	}
-	return `; embedded ${done}`;
 }
