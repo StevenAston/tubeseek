@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+/* Neo Brutalism (tweakcn) */
+:root {
+	--background: #ffffff;
+	--foreground: #000000;
+	--card: #ffffff;
+	--primary: #ff3333;
+	--primary-foreground: #ffffff;
+	--secondary: #ffff00;
+	--secondary-foreground: #000000;
+	--accent: #0066ff;
+	--accent-foreground: #ffffff;
+	--muted: #f0f0f0;
+	--muted-foreground: #333333;
+	--border: #000000;
+}
+
+@media (prefers-color-scheme: dark) {
+	:root {
+		--background: #000000;
+		--foreground: #ffffff;
+		--card: #333333;
+		--primary: #ff6666;
+		--primary-foreground: #000000;
+		--secondary: #ffff33;
+		--secondary-foreground: #000000;
+		--accent: #3399ff;
+		--accent-foreground: #000000;
+		--muted: #1a1a1a;
+		--muted-foreground: #cccccc;
+		--border: #ffffff;
+	}
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-border: var(--border);
+	--font-sans: var(--font-dm-sans);
+	--font-mono: var(--font-space-mono);
+	--shadow-brutal: 4px 4px 0 0 var(--border);
+	--radius: 0px;
+}
+
+body {
+	background: var(--background);
+	color: var(--foreground);
+}
+
+@layer components {
+	.box {
+		@apply border-2 border-border bg-card shadow-brutal;
+	}
+	.btn {
+		@apply border-2 border-border px-4 py-2 font-mono font-bold uppercase shadow-brutal transition-transform
+			hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-none disabled:opacity-50 cursor-pointer;
+	}
+}

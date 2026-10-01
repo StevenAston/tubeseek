@@ -1,0 +1,41 @@
+{
+	"name": "tubeseek",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "next dev -p 5700 -H 0.0.0.0 --webpack",
+		"build": "next build",
+		"start": "next start -p 5700",
+		"lint": "eslint",
+		"test": "node --test \"src/**/*.test.ts\"",
+		"postinstall": "prisma generate"
+	},
+	"dependencies": {
+		"@prisma/adapter-better-sqlite3": "^7.8.0",
+		"@prisma/client": "^7.8.0",
+		"better-sqlite3": "latest",
+		"dotenv": "^16.4.5",
+		"next": "^16.2.9",
+		"react": "19.2.4",
+		"react-dom": "19.2.4"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "^4",
+		"@types/node": "^20",
+		"@types/react": "^19",
+		"@types/react-dom": "^19",
+		"eslint": "^9",
+		"eslint-config-next": "16.2.9",
+		"prisma": "^7.8.0",
+		"tailwindcss": "^4",
+		"typescript": "^5"
+	},
+	"allowScripts": {
+		"@prisma/engines": true,
+		"better-sqlite3": true,
+		"prisma": true,
+		"sharp": true,
+		"unrs-resolver": true
+	}
+}

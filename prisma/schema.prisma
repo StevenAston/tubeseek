@@ -1,0 +1,32 @@
+generator client {
+	provider = "prisma-client"
+	output   = "../src/generated/client"
+}
+
+datasource db {
+	provider = "sqlite"
+}
+
+model Channel {
+	id        String   @id @default(uuid())
+	youtubeId String   @unique // UC… id; RSS feed is youtube.com/feeds/videos.xml?channel_id=<this>
+	title     String
+	url       String
+	approved  Boolean  @default(false)
+	videos    Video[]
+	createdAt DateTime @default(now())
+}
+
+model Video {
+	id           String    @id @default(uuid())
+	youtubeId    String    @unique
+	title        String
+	duration     Int?      // seconds
+	uploadDate   String?   // yt-dlp YYYYMMDD, absent in flat listings
+	channelTitle String?
+	channelId    String?
+	channel      Channel?  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+	isSingle     Boolean   @default(false) // added by its own URL rather than via a channel
+	approval     String    @default("UNRATED") // UNRATED, APPROVED, REJECTED — rejections are kept as negative labels
+	createdAt    DateTime  @default(now())
+}
