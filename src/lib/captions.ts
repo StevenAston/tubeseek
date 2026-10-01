@@ -7,6 +7,9 @@ import { cookieArgs } from "./youtube.ts";
 
 const run = promisify(execFile);
 
+// Kept videos, plus the unrated backlog of approved channels so /rank has candidates. Whisper stays kept-only (GPU minutes each).
+export const NEEDS_CAPTIONS = { OR: [{ approval: "APPROVED" }, { approval: "UNRATED", channel: { approved: true } }] };
+
 type Json3Event = { tStartMs?: number; dDurationMs?: number; segs?: { utf8: string }[] };
 type Segment = [number, number]; // seconds
 

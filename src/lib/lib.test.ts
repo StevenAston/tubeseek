@@ -4,6 +4,7 @@ import { applyRange } from "./range.ts";
 import { classifyUrl } from "./youtube.ts";
 import { cleanTranscript, segmentsToEvents } from "./captions.ts";
 import { chunk, dot, fromBytes, meanNormalize, toBytes } from "./embed.ts";
+import { knnScore } from "./rank.ts";
 
 test("applyRange", () => {
 	const v = ["a", "a", "a", "a", "a"];
@@ -47,4 +48,12 @@ test("embedding helpers", () => {
 	const v = meanNormalize([[1, 0], [0, 1]]);
 	assert.ok(Math.abs(dot(v, v) - 1) < 1e-6); // unit length
 	assert.deepEqual(fromBytes(toBytes(v)), v); // survives the SQLite round trip
+});
+
+test("knnScore rewards closeness to any one interest, not the average of all", () => {
+	const f = (...x: number[]) => new Float32Array(x);
+	const kept = [f(1, 0, 0), f(1, 0, 0), f(0, 1, 0), f(0, 1, 0)]; // two separate interests
+	assert.equal(knnScore(f(1, 0, 0), kept, 2), 1); // squarely in one interest
+	assert.equal(knnScore(f(0, 0, 1), kept, 2), 0); // neither
+	assert.equal(knnScore(f(1, 0, 0), [], 2), 0);
 });

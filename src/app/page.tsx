@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { doAll } from "./actions";
+import { NEEDS_CAPTIONS } from "@/lib/captions";
 import { IngestForm, SinglesList, TranscriptsButton } from "./components";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +12,7 @@ export default async function Home() {
 		orderBy: { createdAt: "desc" },
 		include: { _count: { select: { videos: true } }, videos: { where: { approval: "APPROVED" }, select: { id: true } } },
 	});
-	const pending = await prisma.video.count({ where: { approval: "APPROVED", OR: [{ transcriptSource: null }, { transcriptSource: { in: ["NONE", "WHISPER_PENDING"] } }] } });
+	const pending = await prisma.video.count({ where: { AND: [NEEDS_CAPTIONS, { OR: [{ transcriptSource: null }, { approval: "APPROVED", transcriptSource: { in: ["NONE", "WHISPER_PENDING"] } }] }] } });
 
 	return (
 		<>

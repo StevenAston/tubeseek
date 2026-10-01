@@ -4,7 +4,7 @@ import { useActionState, useState, useTransition } from "react";
 import { applyRange } from "@/lib/range";
 import { approveChannel, fetchTranscripts, ingest, setApproval, type Approval } from "./actions";
 
-export type VideoRowData = { id: string; youtubeId: string; title: string; channelTitle: string | null; duration: number | null; approval: string };
+export type VideoRowData = { id: string; youtubeId: string; title: string; channelTitle: string | null; duration: number | null; approval: string; note?: string };
 
 function fmt(s: number | null) {
 	if (s == null) return "";
@@ -19,7 +19,7 @@ function VideoInfo({ v }: { v: VideoRowData }) {
 			<img src={`https://i.ytimg.com/vi/${v.youtubeId}/mqdefault.jpg`} alt="" loading="lazy" className="w-32 aspect-video object-cover border-2 border-border shrink-0" />
 			<div className="min-w-0 flex-1">
 				<a href={`https://www.youtube.com/watch?v=${v.youtubeId}`} target="_blank" rel="noreferrer" className="font-bold hover:underline line-clamp-2">{v.title}</a>
-				<div className="font-mono text-xs text-muted-foreground">{v.channelTitle} {fmt(v.duration) && `· ${fmt(v.duration)}`}</div>
+				<div className="font-mono text-xs text-muted-foreground">{v.channelTitle} {fmt(v.duration) && `· ${fmt(v.duration)}`} {v.note && `· ${v.note}`}</div>
 			</div>
 		</>
 	);

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { classifyUrl, cookieArgs, ytDlpJson } from "@/lib/youtube";
-import { cleanTranscript, fetchCaptions, pollWhisper, queueWhisper, segmentsToEvents, sponsorSegments } from "@/lib/captions";
+import { NEEDS_CAPTIONS, cleanTranscript, fetchCaptions, pollWhisper, queueWhisper, segmentsToEvents, sponsorSegments } from "@/lib/captions";
 import { embedVideo, toBytes } from "@/lib/embed";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
@@ -61,7 +61,7 @@ export async function ingest(_prev: { errors: string[] }, form: FormData) {
 
 export async function setApproval(ids: string[], approval: Approval) {
 	await prisma.video.updateMany({ where: { id: { in: ids } }, data: { approval } });
-	revalidatePath("/");
+	revalidatePath("/", "layout"); // /rank too: a keep re-weights every score
 }
 
 export async function doAll(channelId: string) {
@@ -83,7 +83,7 @@ const BATCH = 20;
 
 // ponytail: sequential, BATCH per click to stay clear of YouTube's 429s and request timeouts; background job if clicking gets old
 export async function fetchTranscripts(_prev: { msg: string }, _form: FormData) {
-	const todo = await prisma.video.findMany({ where: { approval: "APPROVED", transcriptSource: null }, take: BATCH });
+	const todo = await prisma.video.findMany({ where: { transcriptSource: null, ...NEEDS_CAPTIONS }, orderBy: { approval: "asc" }, take: BATCH }); // "APPROVED" < "UNRATED"
 	let got = 0, none = 0, failed = 0;
 	await log("INFO", `transcript batch: ${todo.length} videos${cookieArgs().length ? " (with cookies)" : ""}`);
 	for (const v of todo) {
