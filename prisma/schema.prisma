@@ -30,6 +30,7 @@ model Video {
 	approval     String    @default("UNRATED") // UNRATED, APPROVED, REJECTED — rejections are kept as negative labels
 	transcript       String?
 	transcriptSource String? // null = not fetched; CAPTIONS | WHISPER = done; NONE = no captions, Whisper not queued yet; WHISPER_PENDING = queued in paudio; FAILED = paudio errored
+	embedding        Bytes?  // nomic-embed-text, Float32 LE, L2-normalised; null out all rows if the model changes
 	createdAt    DateTime  @default(now())
 }
 

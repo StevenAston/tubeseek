@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { applyRange } from "./range.ts";
 import { classifyUrl } from "./youtube.ts";
 import { cleanTranscript, segmentsToEvents } from "./captions.ts";
+import { chunk, dot, fromBytes, meanNormalize, toBytes } from "./embed.ts";
 
 test("applyRange", () => {
 	const v = ["a", "a", "a", "a", "a"];
@@ -37,4 +38,13 @@ test("cleanTranscript drops sponsor-overlapping lines", () => {
 test("Whisper segments go through the same sponsor cut", () => {
 	const ev = segmentsToEvents([{ start: 0, end: 4, text: "intro" }, { start: 4, end: 9, text: "sponsor read" }, { start: 9, end: 12, text: "content" }]);
 	assert.equal(cleanTranscript(ev, [[5, 8]]), "intro content");
+});
+
+test("embedding helpers", () => {
+	const parts = chunk("aaaa bbbb cccc", 7);
+	assert.deepEqual(parts, ["aaaa", "bbbb", "cccc"]); // splits on spaces, never mid-word
+	assert.equal(parts.join(" "), "aaaa bbbb cccc");
+	const v = meanNormalize([[1, 0], [0, 1]]);
+	assert.ok(Math.abs(dot(v, v) - 1) < 1e-6); // unit length
+	assert.deepEqual(fromBytes(toBytes(v)), v); // survives the SQLite round trip
 });

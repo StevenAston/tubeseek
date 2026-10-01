@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { classifyUrl, cookieArgs, ytDlpJson } from "@/lib/youtube";
 import { cleanTranscript, fetchCaptions, pollWhisper, queueWhisper, segmentsToEvents, sponsorSegments } from "@/lib/captions";
+import { embedVideo, toBytes } from "@/lib/embed";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
 
@@ -108,9 +109,10 @@ export async function fetchTranscripts(_prev: { msg: string }, _form: FormData) 
 		await new Promise((r) => setTimeout(r, 4000)); // ponytail: fixed pacing; tune if 429s persist
 	}
 	const w = await whisperStep();
+	const em = await embedStep();
 	revalidatePath("/");
 	const limited = failed && got + none + failed < todo.length;
-	return { msg: `${got} captioned, ${none} without captions${failed ? `, ${failed} failed (will retry)` : ""}${limited ? " — YouTube rate-limited, try again in a few minutes" : ""}${w}` };
+	return { msg: `${got} captioned, ${none} without captions${failed ? `, ${failed} failed (will retry)` : ""}${limited ? " — YouTube rate-limited, try again in a few minutes" : ""}${w}${em}` };
 }
 
 // NONE → queued in paudio (WHISPER_PENDING) → polled each click until WHISPER, or FAILED if paudio errors
@@ -147,4 +149,23 @@ async function whisperStep() {
 		return " — paudio unreachable, Whisper skipped";
 	}
 	return `; Whisper: ${queued} queued, ${done} done, ${waiting} in progress`;
+}
+
+// Every transcribed video without a vector; local GPU, so no batching or pacing needed
+async function embedStep() {
+	const todo = await prisma.video.findMany({ where: { transcript: { not: null }, embedding: null }, select: { id: true, youtubeId: true, title: true, transcript: true } });
+	if (!todo.length) return "";
+	let done = 0;
+	try {
+		for (const v of todo) {
+			const t0 = Date.now();
+			await prisma.video.update({ where: { id: v.id }, data: { embedding: toBytes(await embedVideo(v.title, v.transcript!)) } });
+			await log("INFO", `embedded in ${Date.now() - t0}ms`, v.youtubeId);
+			done++;
+		}
+	} catch (e) {
+		await log("WARN", `Ollama unavailable: ${errLine(e)}`);
+		return `; embedded ${done}, Ollama unavailable for the rest`;
+	}
+	return `; embedded ${done}`;
 }
