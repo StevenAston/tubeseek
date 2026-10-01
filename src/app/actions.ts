@@ -164,8 +164,8 @@ async function embedStep() {
 			done++;
 		}
 	} catch (e) {
-		await log("WARN", `Ollama unavailable: ${errLine(e)}`);
-		return `; embedded ${done}, Ollama unavailable for the rest`;
+		await log("WARN", `LM Studio unavailable: ${errLine(e)}`);
+		return `; embedded ${done}, LM Studio unavailable for the rest`;
 	}
 	return `; embedded ${done}`;
 }

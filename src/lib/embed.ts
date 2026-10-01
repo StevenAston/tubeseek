@@ -1,9 +1,10 @@
-// Video → one vector: chunk the transcript, embed chunks with Ollama, mean-pool, L2-normalise.
+// Video → one vector: chunk the transcript, embed chunks with LM Studio, mean-pool, L2-normalise.
 // Normalised vectors make cosine similarity a plain dot product.
-const OLLAMA = process.env.OLLAMA_URL ?? "http://localhost:11434";
-export const EMBED_MODEL = "nomic-embed-text";
-// ponytail: ~1000 tokens, safely under Ollama's default 2048 num_ctx for this model (it truncates silently past that)
-const CHUNK = 4000;
+// Picked over nomic (tighter, channel-bound clusters) and Qwen3 4B/8B (same quality, 4× slower) on this library.
+const LMSTUDIO = process.env.LMSTUDIO_URL ?? "http://localhost:4545";
+export const EMBED_MODEL = "text-embedding-qwen3-embedding-0.6b";
+// ponytail: ~6000 tokens; load the model with --context-length 8192 or longer chunks get truncated
+const CHUNK = 24000;
 
 export function chunk(text: string, size = CHUNK): string[] {
 	const out: string[] = [];
@@ -29,10 +30,10 @@ export const dot = (a: Float32Array, b: Float32Array) => a.reduce((s, x, i) => s
 export const toBytes = (v: Float32Array<ArrayBuffer>) => new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
 export const fromBytes = (b: Uint8Array) => new Float32Array(b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength));
 
-// nomic-embed-text wants a task prefix; title leads so short transcripts still carry the topic
+// Qwen3 takes documents bare (only queries get an instruction); title leads so short transcripts still carry the topic
 export async function embedVideo(title: string, transcript: string): Promise<Float32Array<ArrayBuffer>> {
-	const input = chunk(`${title}. ${transcript}`).map((c) => `search_document: ${c}`);
-	const res = await fetch(`${OLLAMA}/api/embed`, { method: "POST", body: JSON.stringify({ model: EMBED_MODEL, input }) });
-	if (!res.ok) throw new Error(`Ollama ${res.status}: ${await res.text()}`);
-	return meanNormalize((await res.json()).embeddings);
+	const input = chunk(`${title}. ${transcript}`);
+	const res = await fetch(`${LMSTUDIO}/v1/embeddings`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: EMBED_MODEL, input }) });
+	if (!res.ok) throw new Error(`LM Studio ${res.status}: ${await res.text()}`);
+	return meanNormalize((await res.json()).data.map((d: { embedding: number[] }) => d.embedding));
 }
