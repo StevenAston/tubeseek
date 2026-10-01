@@ -31,6 +31,26 @@ export async function sponsorSegments(youtubeId: string): Promise<Segment[]> {
 	return (await res.json()).map((s: { segment: Segment }) => s.segment);
 }
 
+// Whisper fallback via paudio's /api/transcribe: POST queues (async, minutes on GPU), GET polls
+const PAUDIO = process.env.PAUDIO_URL ?? "http://localhost:5600";
+type WhisperStatus = { status: string; error?: string; segments?: { start: number; end: number; text: string }[] };
+
+export async function queueWhisper(youtubeId: string): Promise<WhisperStatus> {
+	const res = await fetch(`${PAUDIO}/api/transcribe`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ youtubeId }) });
+	if (!res.ok) throw new Error(`paudio ${res.status}`);
+	return res.json();
+}
+
+export async function pollWhisper(youtubeId: string): Promise<WhisperStatus> {
+	const res = await fetch(`${PAUDIO}/api/transcribe?youtubeId=${youtubeId}`);
+	if (!res.ok && res.status !== 404) throw new Error(`paudio ${res.status}`);
+	return res.json();
+}
+
+// Whisper segments → json3-shaped events so cleanTranscript's sponsor cutting applies unchanged
+export const segmentsToEvents = (segs: { start: number; end: number; text: string }[]): Json3Event[] =>
+	segs.map((s) => ({ tStartMs: s.start * 1000, dDurationMs: (s.end - s.start) * 1000, segs: [{ utf8: s.text }] }));
+
 // Manual captions win over auto when both exist. Returns null if the video has no English captions.
 export async function fetchCaptions(youtubeId: string): Promise<Json3Event[] | null> {
 	const dir = await mkdtemp(join(tmpdir(), "tubeseek-"));

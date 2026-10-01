@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyRange } from "./range.ts";
 import { classifyUrl } from "./youtube.ts";
-import { cleanTranscript } from "./captions.ts";
+import { cleanTranscript, segmentsToEvents } from "./captions.ts";
 
 test("applyRange", () => {
 	const v = ["a", "a", "a", "a", "a"];
@@ -32,4 +32,9 @@ test("cleanTranscript drops sponsor-overlapping lines", () => {
 	assert.equal(cleanTranscript(ev, []), "hello world buy our sponsor back to it");
 	assert.equal(cleanTranscript(ev, [[3, 4]]), "hello world back to it");
 	assert.equal(cleanTranscript(ev, [[2, 2.5], [5.5, 6.2]]), "hello world");
+});
+
+test("Whisper segments go through the same sponsor cut", () => {
+	const ev = segmentsToEvents([{ start: 0, end: 4, text: "intro" }, { start: 4, end: 9, text: "sponsor read" }, { start: 9, end: 12, text: "content" }]);
+	assert.equal(cleanTranscript(ev, [[5, 8]]), "intro content");
 });

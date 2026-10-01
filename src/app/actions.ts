@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { classifyUrl, cookieArgs, ytDlpJson } from "@/lib/youtube";
-import { cleanTranscript, fetchCaptions, sponsorSegments } from "@/lib/captions";
+import { cleanTranscript, fetchCaptions, pollWhisper, queueWhisper, segmentsToEvents, sponsorSegments } from "@/lib/captions";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
 
@@ -107,7 +107,44 @@ export async function fetchTranscripts(_prev: { msg: string }, _form: FormData) 
 		}
 		await new Promise((r) => setTimeout(r, 4000)); // ponytail: fixed pacing; tune if 429s persist
 	}
+	const w = await whisperStep();
 	revalidatePath("/");
 	const limited = failed && got + none + failed < todo.length;
-	return { msg: `${got} captioned, ${none} without captions${failed ? `, ${failed} failed (will retry)` : ""}${limited ? " — YouTube rate-limited, try again in a few minutes" : ""}` };
+	return { msg: `${got} captioned, ${none} without captions${failed ? `, ${failed} failed (will retry)` : ""}${limited ? " — YouTube rate-limited, try again in a few minutes" : ""}${w}` };
+}
+
+// NONE → queued in paudio (WHISPER_PENDING) → polled each click until WHISPER, or FAILED if paudio errors
+async function whisperStep() {
+	const todo = await prisma.video.findMany({ where: { approval: "APPROVED", transcriptSource: { in: ["NONE", "WHISPER_PENDING"] } } });
+	if (!todo.length) return "";
+	let queued = 0, done = 0, waiting = 0;
+	try {
+		for (const v of todo) {
+			if (v.transcriptSource === "NONE") {
+				await queueWhisper(v.youtubeId);
+				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "WHISPER_PENDING" } });
+				await log("INFO", "queued for Whisper in paudio", v.youtubeId);
+				queued++;
+				continue;
+			}
+			const r = await pollWhisper(v.youtubeId);
+			if (r.status === "TRANSCRIBED") {
+				const skip = await sponsorSegments(v.youtubeId);
+				const transcript = cleanTranscript(segmentsToEvents(r.segments ?? []), skip);
+				await prisma.video.update({ where: { id: v.id }, data: { transcript, transcriptSource: "WHISPER" } });
+				await log("INFO", `whispered: ${transcript.length} chars, ${skip.length} sponsor segments cut`, v.youtubeId);
+				done++;
+			} else if (r.status === "UNKNOWN") {
+				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "NONE" } }); // paudio lost it; requeue next click
+				await log("WARN", "paudio has no record, will requeue", v.youtubeId);
+			} else if (r.status === "ERROR") {
+				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "FAILED" } });
+				await log("ERROR", `Whisper failed in paudio: ${r.error ?? "unknown error"}`, v.youtubeId);
+			} else waiting++;
+		}
+	} catch (e) {
+		await log("WARN", `paudio unreachable: ${errLine(e)}`);
+		return " — paudio unreachable, Whisper skipped";
+	}
+	return `; Whisper: ${queued} queued, ${done} done, ${waiting} in progress`;
 }

@@ -11,7 +11,7 @@ export default async function Home() {
 		orderBy: { createdAt: "desc" },
 		include: { _count: { select: { videos: true } }, videos: { where: { approval: "APPROVED" }, select: { id: true } } },
 	});
-	const pending = await prisma.video.count({ where: { approval: "APPROVED", transcriptSource: null } });
+	const pending = await prisma.video.count({ where: { approval: "APPROVED", OR: [{ transcriptSource: null }, { transcriptSource: { in: ["NONE", "WHISPER_PENDING"] } }] } });
 
 	return (
 		<>

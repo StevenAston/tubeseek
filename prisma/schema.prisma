@@ -29,7 +29,7 @@ model Video {
 	isSingle     Boolean   @default(false) // added by its own URL rather than via a channel
 	approval     String    @default("UNRATED") // UNRATED, APPROVED, REJECTED — rejections are kept as negative labels
 	transcript       String?
-	transcriptSource String? // CAPTIONS, or NONE = no English captions (Whisper via paudio later); null = not fetched yet
+	transcriptSource String? // null = not fetched; CAPTIONS | WHISPER = done; NONE = no captions, Whisper not queued yet; WHISPER_PENDING = queued in paudio; FAILED = paudio errored
 	createdAt    DateTime  @default(now())
 }
 
