@@ -1,8 +1,24 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { applyRange } from "@/lib/range";
-import { approveChannel, ingest, setApproval, type Approval } from "./actions";
+import { approveChannel, ingest, queueStatus, setApproval, type Approval } from "./actions";
+
+type Status = Awaited<ReturnType<typeof queueStatus>>;
+
+export function QueueStatus({ initial }: { initial: Status }) {
+	const [q, setQ] = useState(initial);
+	useEffect(() => {
+		const t = setInterval(() => queueStatus().then(setQ, () => {}), 10_000);
+		return () => clearInterval(t);
+	}, []);
+	return (
+		<div className="font-mono text-sm text-muted-foreground">
+			<p>QUEUES · captions {q.captions} · whisper {q.whisper} · embedding {q.embedding}{q.whisper > 0 && q.embedding > 0 && " (paused for Whisper)"}</p>
+			{q.last && <p className="truncate">last: {new Date(q.last.createdAt).toLocaleTimeString()} {q.last.youtubeId} {q.last.message}</p>}
+		</div>
+	);
+}
 
 export type VideoRowData = { id: string; youtubeId: string; title: string; channelTitle: string | null; duration: number | null; approval: string; note?: string };
 

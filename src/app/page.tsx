@@ -1,23 +1,22 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
-import { doAll } from "./actions";
-import { queueCounts } from "@/lib/worker";
-import { IngestForm, SinglesList } from "./components";
+import { doAll, queueStatus } from "./actions";
+import { IngestForm, QueueStatus, SinglesList } from "./components";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-	const singles = await prisma.video.findMany({ where: { isSingle: true }, orderBy: { createdAt: "desc" } });
+	const singles = await prisma.video.findMany({ where: { isSingle: true }, omit: { transcript: true, embedding: true }, orderBy: { createdAt: "desc" } });
 	const channels = await prisma.channel.findMany({
 		orderBy: { createdAt: "desc" },
 		include: { _count: { select: { videos: true } }, videos: { where: { approval: "APPROVED" }, select: { id: true } } },
 	});
-	const q = await queueCounts();
+	const q = await queueStatus();
 
 	return (
 		<>
 			<IngestForm />
-			<p className="font-mono text-sm text-muted-foreground">QUEUES · captions {q.captions} · whisper {q.whisper} · embedding {q.embedding}{q.whisper > 0 && q.embedding > 0 && " (paused for Whisper)"}</p>
+			<QueueStatus initial={q} />
 
 			<section className="space-y-4">
 				<h2 className="font-mono text-xl font-bold">VIDEOS <span className="text-muted-foreground text-sm">shift-click to apply to a run</span></h2>

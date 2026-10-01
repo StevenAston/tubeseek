@@ -4,9 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { classifyUrl, ytDlpJson } from "@/lib/youtube";
-import { errLine, log } from "@/lib/worker";
+import { errLine, log, queueCounts } from "@/lib/worker";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
+
+// Polled by QueueStatus so the worker's progress is visible without reloading the page
+export async function queueStatus() {
+	const last = await prisma.log.findFirst({ orderBy: { createdAt: "desc" }, select: { youtubeId: true, message: true, createdAt: true } });
+	return { ...(await queueCounts()), last };
+}
 
 async function ingestOne(raw: string) {
 	const t = classifyUrl(raw);

@@ -7,7 +7,7 @@ import { cookieArgs } from "./youtube";
 import { NEEDS_CAPTIONS, cleanTranscript, fetchCaptions, pollWhisper, queueWhisper, segmentsToEvents, sponsorSegments } from "./captions";
 import { embedVideo, toBytes } from "./embed";
 
-const CAPTION_GAP = 12_000; // ~300 videos/hour, well under YouTube's 429 threshold
+const CAPTION_GAP = 4_000; // fine with cookies; the 429 backoff below catches it if not
 const RATE_LIMITED = 15 * 60_000; // a 429 means back off; retrying sooner only extends the block
 const GPU_TICK = 30_000; // Whisper poll interval, and the wait while paused or idle
 const IDLE = 60_000;
