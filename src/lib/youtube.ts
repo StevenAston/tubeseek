@@ -16,7 +16,7 @@ export function classifyUrl(raw: string): Target {
 	if (u.hostname === "youtu.be" || u.searchParams.has("v") || /^\/(shorts|live|embed)\/[^/]+/.test(u.pathname)) {
 		return { kind: "video", url: u.toString() };
 	}
-	if (u.pathname.startsWith("/playlist")) throw new Error(`playlists not supported: ${raw}`);
+	if (u.pathname.startsWith("/playlist")) throw new Error("playlists not supported");
 	// A channel root returns a playlist of tabs, not videos — point it at the uploads tab
 	const root = u.pathname.match(/^\/(@[^/]+|(channel|c|user)\/[^/]+)\/?$/);
 	if (root) u.pathname = `/${root[1]}/videos`;
