@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { classifyUrl, ytDlpJson } from "@/lib/youtube";
+import { cleanTranscript, fetchCaptions, sponsorSegments } from "@/lib/captions";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
 
@@ -65,4 +66,33 @@ export async function approveChannel(channelId: string, ids: string[]) {
 	await prisma.video.updateMany({ where: { channelId, id: { notIn: ids }, approval: "APPROVED" }, data: { approval: "UNRATED" } });
 	revalidatePath("/");
 	redirect("/");
+}
+
+const BATCH = 20;
+
+// ponytail: sequential, BATCH per click to stay clear of YouTube's 429s and request timeouts; background job if clicking gets old
+export async function fetchTranscripts(_prev: { msg: string }, _form: FormData) {
+	const todo = await prisma.video.findMany({ where: { approval: "APPROVED", transcriptSource: null }, take: BATCH });
+	let got = 0, none = 0, failed = 0;
+	for (const v of todo) {
+		try {
+			const events = await fetchCaptions(v.youtubeId);
+			if (!events) {
+				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "NONE" } });
+				none++;
+				continue;
+			}
+			const transcript = cleanTranscript(events, await sponsorSegments(v.youtubeId));
+			await prisma.video.update({ where: { id: v.id }, data: { transcript, transcriptSource: "CAPTIONS" } });
+			got++;
+		} catch (e) {
+			console.error(v.youtubeId, e);
+			failed++; // left null, retried next click
+			if (String(e).includes("429")) break; // rate-limited: more requests only extend the block
+		}
+		await new Promise((r) => setTimeout(r, 4000)); // ponytail: fixed pacing; tune if 429s persist
+	}
+	revalidatePath("/");
+	const limited = failed && got + none + failed < todo.length;
+	return { msg: `${got} captioned, ${none} without captions${failed ? `, ${failed} failed (will retry)` : ""}${limited ? " — YouTube rate-limited, try again in a few minutes" : ""}` };
 }

@@ -2,7 +2,7 @@
 
 import { useActionState, useState, useTransition } from "react";
 import { applyRange } from "@/lib/range";
-import { approveChannel, ingest, setApproval, type Approval } from "./actions";
+import { approveChannel, fetchTranscripts, ingest, setApproval, type Approval } from "./actions";
 
 export type VideoRowData = { id: string; youtubeId: string; title: string; channelTitle: string | null; duration: number | null; approval: string };
 
@@ -104,5 +104,17 @@ export function RefineList({ channelId, videos }: { channelId: string; videos: V
 				))}
 			</ul>
 		</div>
+	);
+}
+
+export function TranscriptsButton({ pending }: { pending: number }) {
+	const [state, action, busy] = useActionState(fetchTranscripts, { msg: "" });
+	return (
+		<form action={action} className="flex items-center gap-4">
+			<button className="btn bg-secondary text-secondary-foreground" disabled={busy || !pending}>
+				{busy ? "Fetching…" : `Fetch transcripts (${pending} pending)`}
+			</button>
+			<span className="font-mono text-sm">{state.msg}</span>
+		</form>
 	);
 }

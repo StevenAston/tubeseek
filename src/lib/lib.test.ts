@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyRange } from "./range.ts";
 import { classifyUrl } from "./youtube.ts";
+import { cleanTranscript } from "./captions.ts";
 
 test("applyRange", () => {
 	const v = ["a", "a", "a", "a", "a"];
@@ -19,4 +20,16 @@ test("classifyUrl", () => {
 	assert.equal(classifyUrl("https://www.youtube.com/channel/UCx/").url, "https://www.youtube.com/channel/UCx/videos");
 	assert.equal(classifyUrl("https://www.youtube.com/@bigthink/shorts").url, "https://www.youtube.com/@bigthink/shorts");
 	assert.throws(() => classifyUrl("https://www.youtube.com/playlist?list=PL1"));
+});
+
+test("cleanTranscript drops sponsor-overlapping lines", () => {
+	const ev = [
+		{ tStartMs: 0, dDurationMs: 2000, segs: [{ utf8: "hello\n" }, { utf8: "world" }] },
+		{ tStartMs: 2000, dDurationMs: 3000, segs: [{ utf8: "buy our sponsor" }] },
+		{ tStartMs: 5000 }, // newline-only event, no segs
+		{ tStartMs: 6000, dDurationMs: 1000, segs: [{ utf8: "back to it" }] },
+	];
+	assert.equal(cleanTranscript(ev, []), "hello world buy our sponsor back to it");
+	assert.equal(cleanTranscript(ev, [[3, 4]]), "hello world back to it");
+	assert.equal(cleanTranscript(ev, [[2, 2.5], [5.5, 6.2]]), "hello world");
 });

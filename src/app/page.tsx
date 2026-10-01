@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { doAll } from "./actions";
-import { IngestForm, SinglesList } from "./components";
+import { IngestForm, SinglesList, TranscriptsButton } from "./components";
 
 export const dynamic = "force-dynamic";
 
@@ -11,10 +11,12 @@ export default async function Home() {
 		orderBy: { createdAt: "desc" },
 		include: { _count: { select: { videos: true } }, videos: { where: { approval: "APPROVED" }, select: { id: true } } },
 	});
+	const pending = await prisma.video.count({ where: { approval: "APPROVED", transcriptSource: null } });
 
 	return (
 		<>
 			<IngestForm />
+			<TranscriptsButton pending={pending} />
 
 			<section className="space-y-4">
 				<h2 className="font-mono text-xl font-bold">VIDEOS <span className="text-muted-foreground text-sm">shift-click to apply to a run</span></h2>

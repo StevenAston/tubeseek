@@ -28,5 +28,7 @@ model Video {
 	channel      Channel?  @relation(fields: [channelId], references: [id], onDelete: Cascade)
 	isSingle     Boolean   @default(false) // added by its own URL rather than via a channel
 	approval     String    @default("UNRATED") // UNRATED, APPROVED, REJECTED — rejections are kept as negative labels
+	transcript       String?
+	transcriptSource String? // CAPTIONS, or NONE = no English captions (Whisper via paudio later); null = not fetched yet
 	createdAt    DateTime  @default(now())
 }
