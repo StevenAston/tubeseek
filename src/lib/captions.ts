@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { cookieArgs } from "./youtube.ts";
 
 const run = promisify(execFile);
 
@@ -35,7 +36,7 @@ export async function fetchCaptions(youtubeId: string): Promise<Json3Event[] | n
 	const dir = await mkdtemp(join(tmpdir(), "tubeseek-"));
 	try {
 		// "en" only: "en.*" also matches every auto-translated track and gets rate-limited (429)
-		const err = await run("yt-dlp", ["--skip-download", "--write-subs", "--write-auto-subs", "--sub-langs", "en", "--sub-format", "json3",
+		const err = await run("yt-dlp", [...cookieArgs(), "--skip-download","--write-subs", "--write-auto-subs", "--sub-langs", "en", "--sub-format", "json3",
 			"-o", join(dir, "%(id)s"), `https://www.youtube.com/watch?v=${youtubeId}`]).then(() => null, (e: Error) => e);
 		const file = (await readdir(dir)).find((f) => f.endsWith(".json3"));
 		if (file) return JSON.parse(await readFile(join(dir, file), "utf8")).events; // partial failures still write files

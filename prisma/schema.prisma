@@ -32,3 +32,12 @@ model Video {
 	transcriptSource String? // CAPTIONS, or NONE = no English captions (Whisper via paudio later); null = not fetched yet
 	createdAt    DateTime  @default(now())
 }
+
+// ponytail: grows forever; prune old rows if it ever gets big
+model Log {
+	id        Int      @id @default(autoincrement())
+	createdAt DateTime @default(now())
+	level     String   // INFO, WARN, ERROR
+	youtubeId String?
+	message   String
+}

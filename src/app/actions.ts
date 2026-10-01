@@ -3,10 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { classifyUrl, ytDlpJson } from "@/lib/youtube";
+import { classifyUrl, cookieArgs, ytDlpJson } from "@/lib/youtube";
 import { cleanTranscript, fetchCaptions, sponsorSegments } from "@/lib/captions";
 
 export type Approval = "UNRATED" | "APPROVED" | "REJECTED";
+
+// yt-dlp errors are a wall of stdout; the ERROR line is the useful bit
+const errLine = (e: unknown) => e instanceof Error ? e.message.split("\n").find((l) => l.includes("ERROR")) ?? e.message : String(e);
+
+async function log(level: "INFO" | "WARN" | "ERROR", message: string, youtubeId?: string) {
+	console.log(`[${level}]${youtubeId ? ` ${youtubeId}` : ""} ${message}`);
+	await prisma.log.create({ data: { level, message, youtubeId } });
+}
 
 async function ingestOne(raw: string) {
 	const t = classifyUrl(raw);
@@ -40,8 +48,10 @@ export async function ingest(_prev: { errors: string[] }, form: FormData) {
 	for (const url of urls) {
 		try {
 			await ingestOne(url);
+			await log("INFO", `ingested ${url}`);
 		} catch (e) {
-			errors.push(`${url}: ${e instanceof Error ? e.message.split("\n").find((l) => l.includes("ERROR")) ?? e.message : e}`);
+			errors.push(`${url}: ${errLine(e)}`);
+			await log("ERROR", `ingest ${url}: ${errLine(e)}`);
 		}
 	}
 	revalidatePath("/");
@@ -74,19 +84,24 @@ const BATCH = 20;
 export async function fetchTranscripts(_prev: { msg: string }, _form: FormData) {
 	const todo = await prisma.video.findMany({ where: { approval: "APPROVED", transcriptSource: null }, take: BATCH });
 	let got = 0, none = 0, failed = 0;
+	await log("INFO", `transcript batch: ${todo.length} videos${cookieArgs().length ? " (with cookies)" : ""}`);
 	for (const v of todo) {
+		const t0 = Date.now();
 		try {
 			const events = await fetchCaptions(v.youtubeId);
 			if (!events) {
 				await prisma.video.update({ where: { id: v.id }, data: { transcriptSource: "NONE" } });
+				await log("WARN", "no English captions", v.youtubeId);
 				none++;
 				continue;
 			}
-			const transcript = cleanTranscript(events, await sponsorSegments(v.youtubeId));
+			const skip = await sponsorSegments(v.youtubeId);
+			const transcript = cleanTranscript(events, skip);
 			await prisma.video.update({ where: { id: v.id }, data: { transcript, transcriptSource: "CAPTIONS" } });
+			await log("INFO", `captioned: ${transcript.length} chars, ${skip.length} sponsor segments cut, ${Date.now() - t0}ms`, v.youtubeId);
 			got++;
 		} catch (e) {
-			console.error(v.youtubeId, e);
+			await log("ERROR", errLine(e), v.youtubeId);
 			failed++; // left null, retried next click
 			if (String(e).includes("429")) break; // rate-limited: more requests only extend the block
 		}
