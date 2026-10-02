@@ -6,7 +6,7 @@ import { SinglesList } from "../components";
 export const dynamic = "force-dynamic";
 
 export default async function Rank() {
-	const videos = await prisma.video.findMany({ where: { embedding: { not: null }, approval: { in: ["APPROVED", "UNRATED"] } } });
+	const videos = await prisma.video.findMany({ where: { embedding: { not: null }, approval: { in: ["APPROVED", "UNRATED"] } }, omit: { transcript: true } });
 	const kept = videos.filter((v) => v.approval === "APPROVED").map((v) => fromBytes(v.embedding!));
 	const ranked = videos
 		.filter((v) => v.approval === "UNRATED")
